@@ -1,5 +1,10 @@
 const std = @import("std");
 const Payload = struct { message: []u8 };
+const Methods = enum { GET, PUT, POST, DELETE };
+const Headers = struct {
+    method: Methods,
+    http: u8,
+};
 const allocator = std.heap.page_allocator;
 
 pub fn main() !void {
@@ -16,7 +21,14 @@ pub fn main() !void {
         defer if (parsed_json) |json| {
             json.deinit();
         };
-        try std.io.getStdOut().writer().print("{any}", .{parsed_json.?.value});
+        var parsed_headers = try get_hearders(&buf);
+        defer if (parsed_headers) |header| {
+            header.deinit();
+        };
+        try std.io.getStdOut().writer().print("{any}\n", .{parsed_json.?.value});
+        for (parsed_headers.?.items) |header| {
+            try std.io.getStdOut().writer().print("{s}\n", .{header});
+        }
     }
 }
 
@@ -37,10 +49,17 @@ pub fn parse_json(buf: *[1024]u8) !?std.json.Parsed(Payload) {
     }
 }
 
-// const headers = buf[0..start];
-// try std.io.getStdOut().writer().print("\nHeaders >\n{s}\n", .{headers});
-// const f1 = std.mem.indexOf(u8, headers, "\n");
-// if (f1) |value| {
-//     const l1 = headers[0..value];
-//     try std.io.getStdOut().writer().print("{s}", .{l1});
-// }
+pub fn get_hearders(buf: *[1024]u8) !?std.ArrayList([]const u8) {
+    const end_of_headers = std.mem.indexOf(u8, buf, "{");
+    if (end_of_headers) |start| {
+        const headers = buf[0..start];
+        var split = std.mem.splitScalar(u8, headers, '\n');
+        var headers_array = std.ArrayList([]const u8).init(allocator);
+        while (split.next()) |header| {
+            try headers_array.append(header);
+        }
+        return headers_array;
+    } else {
+        return null;
+    }
+}
